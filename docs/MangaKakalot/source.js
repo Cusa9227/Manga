@@ -463,20 +463,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MangaKakalot = exports.MangaKakalotInfo = void 0;
 const types_1 = require("@paperback/types");
 exports.MangaKakalotInfo = {
-    version: '1.0.0',
+    version: '1.0.1',
     name: 'MangaKakalot',
     icon: 'icon.png',
     author: 'Cusa9227',
     authorWebsite: 'https://github.com/Cusa9227',
     description: 'Extension that pulls manga from MangaKakalot',
     contentRating: types_1.ContentRating.MATURE,
-    websiteBaseURL: 'https://mangakakalot.to',
+    websiteBaseURL: 'https://mangakakalot.gg',
     intents: types_1.SourceIntents.MANGA_CHAPTERS,
 };
 class MangaKakalot extends types_1.Source {
     constructor() {
         super(...arguments);
-        this.baseUrl = 'https://mangakakalot.to';
+        this.baseUrl = 'https://mangakakalot.gg';
         this.requestManager = App.createRequestManager({
             requestsPerSecond: 4,
             requestTimeout: 15000,
@@ -525,7 +525,7 @@ class MangaKakalot extends types_1.Source {
         const $ = await this.fetchCheerio(`${this.baseUrl}/manga/${mangaId}`);
         const chapters = [];
         $('.chapter-list .row, .row-content-chapter li').each((index, el) => {
-            const anchor = $('a', el);
+            const anchor = $('a', el).first();
             const href = anchor.attr('href') ?? '';
             const name = anchor.text().trim();
             const id = href.replace(this.baseUrl, '');
@@ -557,7 +557,7 @@ class MangaKakalot extends types_1.Source {
         const $ = await this.fetchCheerio(`${this.baseUrl}/search/story/${searchTerm}`);
         const tiles = [];
         $('.story_item, .story-item, .search-story-item').each((_, el) => {
-            const anchor = $('h3.story_name a', el).first() || $('h3.story-name a', el).first();
+            const anchor = $('h3 a', el).first();
             const href = anchor.attr('href') ?? '';
             const mangaId = href.replace(this.baseUrl, '').replace('/manga/', '').replace(/^\/+/, '').trim();
             const title = anchor.text().trim();
