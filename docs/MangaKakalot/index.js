@@ -471,7 +471,7 @@ exports.MangaKakalotInfo = {
     description: 'Extension that pulls manga from MangaKakalot',
     contentRating: types_1.ContentRating.MATURE,
     websiteBaseURL: 'https://mangakakalot.com',
-    intents: types_1.SourceIntents.MANGA_CHAPTERS | types_1.SourceIntents.HOMEPAGE_SECTIONS,
+    intents: types_1.SourceIntents.MANGA_CHAPTERS,
 };
 class MangaKakalot extends types_1.Source {
     constructor() {
