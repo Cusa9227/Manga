@@ -470,31 +470,43 @@ exports.MangaKakalotInfo = {
     authorWebsite: 'https://github.com/Cusa9227',
     description: 'Extension that pulls manga from MangaKakalot',
     contentRating: types_1.ContentRating.MATURE,
-    websiteBaseURL: 'https://mangakakalot.com',
+    websiteBaseURL: 'https://mangakakalot.to',
     intents: types_1.SourceIntents.MANGA_CHAPTERS,
 };
 class MangaKakalot extends types_1.Source {
     constructor() {
         super(...arguments);
-        this.baseUrl = 'https://mangakakalot.com';
+        this.baseUrl = 'https://mangakakalot.to';
         this.requestManager = App.createRequestManager({
             requestsPerSecond: 4,
             requestTimeout: 15000,
         });
     }
-    async getMangaDetails(mangaId) {
-        const request = App.createRequest({ url: `${this.baseUrl}/manga/${mangaId}`, method: 'GET' });
+    async fetchCheerio(url) {
+        const request = App.createRequest({
+            url,
+            method: 'GET',
+            headers: {
+                referer: this.baseUrl,
+                'user-agent': 'Mozilla/5.0',
+            },
+        });
         const response = await this.requestManager.schedule(request, 1);
-        const $ = this.cheerio.load(response.data);
-        const title = $('.manga-info-text h1').text().trim();
-        const author = $('.manga-info-text li:contains("Author") a').text().trim();
-        const desc = $('#contentBox').text().trim();
-        const image = $('.manga-info-pic img').attr('src') ?? '';
-        const isOngoing = $('.manga-info-text li:contains("Status")').text().includes('Ongoing');
+        return this.cheerio.load(response.data);
+    }
+    async getMangaDetails(mangaId) {
+        const $ = await this.fetchCheerio(`${this.baseUrl}/manga/${mangaId}`);
+        const title = $('.manga-info-text h1').first().text().trim() || $('.story-info-right h1').first().text().trim();
+        const author = $('.manga-info-text li:contains("Author") a').text().trim() || $('.story-info-right-extent a').first().text().trim();
+        const desc = $('#noidungm').text().trim() || $('#contentBox').text().trim() || $('.panel-story-info-description').text().trim();
+        const image = $('.manga-info-pic img').attr('src') || $('.info-image img').attr('src') || '';
+        const statusText = $('.manga-info-text li:contains("Status")').text() || $('.story-info-right-extent').text();
+        const isOngoing = statusText.toLowerCase().includes('ongoing');
         const tags = [];
-        $('.manga-info-text .manga-info-genre a').each((_, el) => {
+        $('.manga-info-genre a, .genres a, td.table-value a').each((_, el) => {
             const label = $(el).text().trim();
-            tags.push(App.createTag({ id: label.toLowerCase(), label }));
+            if (label)
+                tags.push(App.createTag({ id: label.toLowerCase(), label }));
         });
         const tagSection = App.createTagSection({ id: 'genres', label: 'Genres', tags });
         return App.createSourceManga({
@@ -506,37 +518,35 @@ class MangaKakalot extends types_1.Source {
                 desc,
                 status: isOngoing ? 'Ongoing' : 'Completed',
                 tags: [tagSection],
-            })
+            }),
         });
     }
     async getChapters(mangaId) {
-        const request = App.createRequest({ url: `${this.baseUrl}/manga/${mangaId}`, method: 'GET' });
-        const response = await this.requestManager.schedule(request, 1);
-        const $ = this.cheerio.load(response.data);
+        const $ = await this.fetchCheerio(`${this.baseUrl}/manga/${mangaId}`);
         const chapters = [];
-        $('.chapter-list .row').each((index, el) => {
+        $('.chapter-list .row, .row-content-chapter li').each((index, el) => {
             const anchor = $('a', el);
             const href = anchor.attr('href') ?? '';
             const name = anchor.text().trim();
-            const id = href.split('/').pop() ?? '';
+            const id = href.replace(this.baseUrl, '');
             const match = name.match(/chapter[- ]?(\d+(\.\d+)?)/i);
-            const chapNum = match ? parseFloat(match[1] ?? '0') : index;
+            const chapNum = match ? parseFloat(match[1] ?? '0') : index + 1;
+            const dateText = $('.chapter-time', el).attr('title') || $('span', el).last().text().trim();
             chapters.push(App.createChapter({
                 id,
                 name,
                 chapNum,
-                langCode: '🇬🇧',
+                langCode: 'gb',
+                time: dateText ? new Date(dateText) : undefined,
             }));
         });
-        return chapters;
+        return chapters.reverse();
     }
     async getChapterDetails(mangaId, chapterId) {
-        const request = App.createRequest({ url: `${this.baseUrl}/chapter/${mangaId}/${chapterId}`, method: 'GET' });
-        const response = await this.requestManager.schedule(request, 1);
-        const $ = this.cheerio.load(response.data);
+        const $ = await this.fetchCheerio(`${this.baseUrl}${chapterId}`);
         const pages = [];
-        $('.container-chapter-reader img').each((_, el) => {
-            const src = $(el).attr('src');
+        $('.container-chapter-reader img, .vung-doc img').each((_, el) => {
+            const src = $(el).attr('src') || $(el).attr('data-src');
             if (src)
                 pages.push(src);
         });
@@ -544,18 +554,16 @@ class MangaKakalot extends types_1.Source {
     }
     async getSearchResults(query, _metadata) {
         const searchTerm = encodeURIComponent(query.title ?? '');
-        const request = App.createRequest({ url: `${this.baseUrl}/search/story/${searchTerm}`, method: 'GET' });
-        const response = await this.requestManager.schedule(request, 1);
-        const $ = this.cheerio.load(response.data);
+        const $ = await this.fetchCheerio(`${this.baseUrl}/search/story/${searchTerm}`);
         const tiles = [];
-        $('.story-item').each((_, el) => {
-            const anchor = $('h3.story-name a', el);
+        $('.story_item, .story-item, .search-story-item').each((_, el) => {
+            const anchor = $('h3.story_name a', el).first() || $('h3.story-name a', el).first();
             const href = anchor.attr('href') ?? '';
-            const id = href.split('/').pop() ?? '';
+            const mangaId = href.replace(this.baseUrl, '').replace('/manga/', '').replace(/^\/+/, '').trim();
             const title = anchor.text().trim();
-            const image = $('img', el).attr('src') ?? '';
-            if (id && title)
-                tiles.push(App.createPartialSourceManga({ mangaId: id, title, image }));
+            const image = $('img', el).attr('src') || $('img', el).attr('data-src') || '';
+            if (mangaId && title)
+                tiles.push(App.createPartialSourceManga({ mangaId, title, image }));
         });
         return App.createPagedResults({ results: tiles });
     }
